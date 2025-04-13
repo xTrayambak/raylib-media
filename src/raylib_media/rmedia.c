@@ -185,6 +185,8 @@ typedef struct MediaContext
 	MediaState state;                           // Current state of the media. Use SetMediaState()/GetMediaState() to modify.
 	double timePos;                             // Current playback position in seconds
 	bool loopPlay;                              // Indicates if the media plays in a loop. Use SetMediaLooping() to set.
+	double volume;                              // Volume level for the media stream (0.0 to 1.0). Use SetMediaVolume() to set.
+	double storedVolume;                        // Stored volume level for the media stream (0.0 to 1.0) used for restoring the audio level.
 } MediaContext;
 
 
@@ -319,8 +321,9 @@ void AVUnloadCodecContext(StreamDataContext* streamCtx);
 // - fileName: Name of the media file to load. Ignored if a valid MediaStreamReader is provided.
 // - streamReader: A MediaStreamReader containing custom IO callbacks. Takes precedence over fileName if valid.
 // - flags: Combination of MediaLoadFlag values to configure loading behavior.
+// - volume: Volume level for the media stream (0.0 to 1.0). Default is 1.0.
 // Returns: Pointer to the allocated MediaContext on success, or NULL on failure.
-MediaContext* LoadMediaContext(const char* fileName, MediaStreamReader streamReader, int flags);
+MediaContext* LoadMediaContext(const char* fileName, MediaStreamReader streamReader, int flags, double volume);
 
 void UnloadMediaContext(MediaContext* ctx);
 
@@ -526,6 +529,67 @@ double GetMediaPosition(MediaStream media)
 	return pos;
 }
 
+bool SetMediaVolume(MediaStream media, double volume)
+{
+    if (!IsMediaValid(media))
+    {
+        TraceLog(LOG_WARNING, "MEDIA: Trying to set volume on an invalid media.");
+        return false;
+    }
+
+	volume = CLAMP(volume, 0.0, 1.0);
+
+	if (volume > 0.0) {
+		media.ctx->storedVolume = volume;
+	}
+
+    media.ctx->volume = volume;
+    return true;
+}
+
+double GetMediaVolume(MediaStream media)
+{
+    if(!IsMediaValid(media))
+    {
+        TraceLog(LOG_WARNING, "MEDIA: Trying to get volume of an invalid media.");
+        return -1.0f;
+    }
+    return media.ctx->volume;
+}
+
+bool MuteMedia(MediaStream media) {
+    if (!IsMediaValid(media)) {
+        TraceLog(LOG_WARNING, "MEDIA: Trying to mute an invalid media.");
+        return false;
+    }
+
+	if (media.ctx->volume > 0.0) {
+		media.ctx->storedVolume = media.ctx->volume;
+	}
+	media.ctx->volume = 0.0;
+
+    return true;
+}
+
+bool UnmuteMedia(MediaStream media) {
+    if (!IsMediaValid(media)) {
+        TraceLog(LOG_WARNING, "MEDIA: Trying to unmute an invalid media.");
+        return false;
+    }
+
+    media.ctx->volume = CLAMP(media.ctx->storedVolume, 0.0, 1.0);
+    return true;
+}
+
+bool IsMediaMuted(MediaStream media) {
+	if (!IsMediaValid(media)) {
+        TraceLog(LOG_WARNING, "MEDIA: Trying to check if media is muted.");
+        return false;
+    }
+
+	return media.ctx->volume <= 0.0;
+}
+
 bool SetMediaLooping(MediaStream media, bool loopPlay)
 {
 	int ret = false;
@@ -548,13 +612,15 @@ bool SetMediaLooping(MediaStream media, bool loopPlay)
 // Functions Definition - Media Context loading and unloading
 //---------------------------------------------------------------------------------------------------
 
-MediaContext* LoadMediaContext(const char* fileName, MediaStreamReader streamReader, int flags)
+MediaContext* LoadMediaContext(const char* fileName, MediaStreamReader streamReader, int flags, double volume)
 {
 	MediaContext* ctx = (MediaContext*) RL_MALLOC(sizeof(MediaContext));
 
 	*ctx = (MediaContext){ 0 };
 
 	ctx->state = MEDIA_STATE_INVALID;
+	ctx->volume = CLAMP(volume, 0.0, 1.0);
+	ctx->storedVolume = ctx->volume;
 
 	ctx->formatContext = avformat_alloc_context();
 
@@ -1002,16 +1068,16 @@ MediaStream LoadMediaFromContext(MediaContext *ctx, int flags)
 
  MediaStream LoadMedia(const char* fileName)
  {
-	 return LoadMediaEx(fileName, MEDIA_LOAD_AV);
+	 return LoadMediaEx(fileName, MEDIA_LOAD_AV, 1.0);
  }
 
- MediaStream LoadMediaEx(const char* fileName, int flags)
+ MediaStream LoadMediaEx(const char* fileName, int flags, double volume)
  {
-	 MediaContext* ctx = LoadMediaContext(fileName, (MediaStreamReader) { 0 }, flags);
+	 MediaContext* ctx = LoadMediaContext(fileName, (MediaStreamReader) { 0 }, flags, volume);
 	 return LoadMediaFromContext(ctx, flags);
  }
 
- MediaStream LoadMediaFromStream(MediaStreamReader streamReader, int flags)
+ MediaStream LoadMediaFromStream(MediaStreamReader streamReader, int flags, double volume)
  {
 	 if (!streamReader.readFn)
 	 {
@@ -1019,7 +1085,7 @@ MediaStream LoadMediaFromContext(MediaContext *ctx, int flags)
 		 return (MediaStream) { 0 }; 
 	 }
 
-	 MediaContext* ctx = LoadMediaContext(NULL, streamReader, flags); 
+	 MediaContext* ctx = LoadMediaContext(NULL, streamReader, flags, volume);
 	 return LoadMediaFromContext(ctx, flags); 
  }
 
@@ -1972,6 +2038,53 @@ int  AVProcessVideoFrame(const MediaStream* media)
 	return 0;
 }
 
+static void ApplyVolumeScaling(void* outputBuffer, int convertedSamples, const MediaStream* media) {
+    MediaContext* ctx = media->ctx;
+    switch (ctx->audioOutputFmt) {
+        case AV_SAMPLE_FMT_S16:
+        {
+            int16_t* samples = (int16_t*)outputBuffer;
+            int totalSamples = convertedSamples * media->audioStream.channels;
+            for (int i = 0; i < totalSamples; i++) {
+                float adjusted = samples[i] * ctx->volume;
+				samples[i] = (int16_t) CLAMP(adjusted, (float)INT16_MIN, (float)INT16_MAX);
+            }
+        }
+        break;
+        case AV_SAMPLE_FMT_S32:
+        {
+            int32_t* samples = (int32_t*)outputBuffer;
+            int totalSamples = convertedSamples * media->audioStream.channels;
+            for (int i = 0; i < totalSamples; i++) {
+                float adjusted = samples[i] * ctx->volume;
+				samples[i] = (int32_t) CLAMP(adjusted, (float)INT32_MIN, (float)INT32_MAX);
+            }
+        }
+        break;
+        case AV_SAMPLE_FMT_FLT:
+        {
+            float* samples = (float*)outputBuffer;
+            int totalSamples = convertedSamples * media->audioStream.channels;
+            for (int i = 0; i < totalSamples; i++) {
+                samples[i] *= ctx->volume;
+            }
+        }
+        break;
+        case AV_SAMPLE_FMT_DBL:
+        {
+            double* samples = (double*)outputBuffer;
+            int totalSamples = convertedSamples * media->audioStream.channels;
+            for (int i = 0; i < totalSamples; i++) {
+                samples[i] *= ctx->volume;
+            }
+        }
+        break;
+        default:
+            TraceLog(LOG_WARNING, "MEDIA: Volume scaling for unsupported audio format.");
+            break;
+    }
+}
+
 int  AVProcessAudioFrame(const MediaStream* media)
 {
 	MediaContext* ctx = media->ctx;
@@ -2028,6 +2141,9 @@ int  AVProcessAudioFrame(const MediaStream* media)
 			ctx->audioOutputFmt,
 			1
 		);
+
+		// Apply volume scaling to the converted samples in the output buffer.
+		ApplyVolumeScaling(outputBuffer, convertedSamples, media);
 
 		AdvanceWritePosN(&ctx->audioOutputBuffer.state, convertedSamplesBytes);
 

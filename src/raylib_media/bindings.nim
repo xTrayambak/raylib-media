@@ -86,11 +86,11 @@ proc LoadMedia*(fileName: cstring): MediaStream
   ## Load a `MediaStream` from a file.
   ## Returns an empty `MediaStream` on failure.
 
-proc LoadMediaEx*(fileName: cstring, flags: int32): MediaStream
+proc LoadMediaEx*(fileName: cstring, flags: int32, volume: float32): MediaStream
   ## Load a `MediaStream` from a file with flags.
   ## Returns an empty `MediaStream` on failure.
 
-proc LoadMediaFromStream*(streamReader: MediaStreamReader, flags: int32)
+proc LoadMediaFromStream*(streamReader: MediaStreamReader, flags: int32, volume: float32): MediaStream
   ## Load a `MediaStream` from a custom stream with flags.
   ## Returns an empty `MediaStream` on failure.
 
@@ -113,6 +113,17 @@ proc SetMediaState*(mediaStream: MediaStream, newState: int32): int32
 proc GetMediaPosition*(mediaStream: MediaStream): float32
 
 proc SetMediaPosition*(mediaStream: MediaStream, timeSec: float32): bool
+
+proc GetMediaVolume*(mediaStream: MediaStream): float32
+
+proc SetMediaVolume*(mediaStream: MediaStream, volume: float32): bool
+
+proc MuteMedia*(mediaStream: MediaStream): bool
+
+proc UnmuteMedia*(mediaStream: MediaStream): bool
+
+proc IsMediaMuted*(mediaStream: MediaStream): bool
+  ## Check if a `MediaStream` is muted.
 
 proc SetMediaLooping*(mediaStream: MediaStream, loopPlay: bool): bool
 
