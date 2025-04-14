@@ -170,17 +170,19 @@ extern "C" {
      * Load a MediaStream from a file with flags.
      * @param fileName Path to the movie file
      * @param flags Combination of MediaLoadFlag values
+     * @param volume Volume level (0.0 to 1.0). Default is 1.0
      * @return MediaStream on success; empty structure on failure
      */
-    RLAPI MediaStream LoadMediaEx(const char* fileName, int flags);
+    RLAPI MediaStream LoadMediaEx(const char* fileName, int flags, double volume);
 
     /**
      * Load a MediaStream from a custom stream with flags.
      * @param streamReader A valid MediaStreamReader with callback functions and context
      * @param flags Combination of MediaLoadFlag values
+     * @param volume Volume level (0.0 to 1.0). Default is 1.0
      * @return MediaStream on success; empty structure on failure
      */
-    RLAPI MediaStream LoadMediaFromStream(MediaStreamReader streamReader, int flags);
+    RLAPI MediaStream LoadMediaFromStream(MediaStreamReader streamReader, int flags, double volume);
 
     /**
      * Check if a MediaStream is valid (loaded and initialized).
@@ -240,6 +242,42 @@ extern "C" {
      * @return true on success; false otherwise
      */
     RLAPI bool SetMediaPosition(MediaStream media, double timeSec);
+
+    /**
+     * Get the volume of a MediaStream.
+     * @param media A valid MediaStream
+     * @return Volume level; negative on failure
+     */
+    RLAPI double GetMediaVolume(MediaStream media);
+
+    /**
+     * Set the volume of a MediaStream.
+     * @param media A valid MediaStream
+     * @param volume Volume level (0.0 to 1.0)
+     * @return true on success; false otherwise
+     */
+    RLAPI bool SetMediaVolume(MediaStream media, double volume);
+
+    /**
+     * Mute a MediaStream.
+     * @param media A valid MediaStream
+     * @return true on success; false otherwise
+     */
+    RLAPI bool MuteMedia(MediaStream media);
+
+    /**
+     * Unmute a MediaStream.
+     * @param media A valid MediaStream
+     * @return true on success; false otherwise
+     */
+    RLAPI bool UnmuteMedia(MediaStream media);
+
+    /**
+     * Check if a MediaStream is muted.
+     * @param media A valid MediaStream
+     * @return true if muted; false otherwise
+     */
+    RLAPI bool IsMediaMuted(MediaStream media);
 
     /**
      * Enable or disable loop playback for a MediaStream.

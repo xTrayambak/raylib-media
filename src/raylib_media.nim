@@ -4,8 +4,8 @@ import std/[options]
 import pkg/raylib
 import raylib_media/bindings
 
-proc newMediaStream*(file: string, flags: set[MediaLoadFlag] = {}): Option[MediaStream] {.inline.} =
-  var media = LoadMediaEx(file.cstring(), cast[int32](flags))
+proc newMediaStream*(file: string, flags: set[MediaLoadFlag] = {}, volume: float32 = 1.0): Option[MediaStream] {.inline.} =
+  var media = LoadMediaEx(file.cstring(), cast[int32](flags), volume)
 
   if IsMediaValid(media):
     return some(move(media))
@@ -36,6 +36,21 @@ func `position=`*(media: var MediaStream, time: float32): bool {.inline, discard
 
 func position*(media: MediaStream): float32 {.inline, discardable.} =
   GetMediaPosition(media)
+
+func `volume=`*(media: var MediaStream, volume: float32): bool {.inline, discardable.} =
+  SetMediaVolume(media, volume)
+
+func volume*(media: MediaStream): float32 {.inline, discardable.} =
+  GetMediaVolume(media)
+
+func mute*(media: var MediaStream, flag: bool): bool {.inline, discardable.} =
+  if flag:
+    return MuteMedia(media)
+  else:
+    return UnmuteMedia(media)
+
+func isMuted*(media: MediaStream): bool {.inline.} =
+  IsMediaMuted(media)
 
 func mediaProperties*(media: MediaStream): MediaProperties {.inline.} =
   GetMediaProperties(media)

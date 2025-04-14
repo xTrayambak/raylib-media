@@ -12,7 +12,8 @@ proc main =
   setTargetFPS(144)
   initAudioDevice()
 
-  let oStream = newMediaStream(param)
+  # Volume param is optional, default is 1.0f
+  let oStream = newMediaStream(file=param, volume=0.5f)
   if oStream.isNone:
     quit "Failed to load media file: " & param
     
@@ -21,7 +22,7 @@ proc main =
 
   while not windowShouldClose():
     stream.update()
-    echo stream.position
+    echo stream.position, " ", stream.volume
 
     if isKeyPressed(Left):
       stream.position = stream.position - 10f
@@ -32,6 +33,16 @@ proc main =
     if isKeyPressed(Space):
       stream.state = (if stream.state == MediaState.Paused: MediaState.Playing else: MediaState.Paused)
       stream.update()
+
+    if isKeyPressed(M):
+      let isMuted = not stream.isMuted
+      discard stream.mute(isMuted)
+
+    if isKeyPressed(Up):
+      stream.volume = stream.volume + 0.1f
+
+    if isKeyPressed(Down):
+      stream.volume = stream.volume - 0.1f
 
     drawing:
       clearBackground(RayWhite)
